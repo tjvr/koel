@@ -1,14 +1,11 @@
 `koel` is a javascript library in two parts.
 
-The first part is a tiny, efficient rewrite of the
-[http://knockoutjs.com/](knockout.js) library, because I like observables.
+- The first part is a tiny, efficient rewrite of
+  [http://knockoutjs.com/](knockout.js).
 
-The second is a rewrite of [the `el()`
-function](http://blog.fastmail.com/2012/02/20/building-the-new-ajax-mail-ui-part-2-better-than-templates-building-highly-dynamic-web-pages/)
-used in FastMail.
-
-Usage
-=====
+- The second is a rewrite of [the `el()`
+  function](http://blog.fastmail.com/2012/02/20/building-the-new-ajax-mail-ui-part-2-better-than-templates-building-highly-dynamic-web-pages/)
+  used in FastMail.
 
 ## ko ##
 
@@ -18,13 +15,13 @@ Usage
 
         var fruitOfTheDay = ko('banana');
 
-    To **read** from an observable, call it like you would a function:
-    
-        fruitOfTheDay(); // => 'banana'
+      - To **read** from an observable, call it like you would a function:
 
-    To **write** to an observable, use `.assign()`.
- 
-        fruitOfTheDay.assign('melon');
+            fruitOfTheDay(); // => 'banana'
+
+      - To **write** to an observable, use `.assign()`.
+
+            fruitOfTheDay.assign('melon');
 
 - **Computeds**, which wrap a function.
 
@@ -39,13 +36,15 @@ Usage
 
     Computeds are a kind of observable: you read from them in the same way. You
     may read from one computed inside another.
-    
+
     You can't assign to a computed.
+
+That's about it; observables and computeds make up the core of ko.
 
 Observables also support the following:
 
-  - <code>**.subscribe(**function() { ... } _[_, callNow_]_**)**</code>
-  
+  - <code>**.subscribe(**function() { … } _[_, callNow_]_**)**</code>
+
     Explicitly subscribe to the observable.
 
     ```
@@ -62,8 +61,8 @@ Observables also support the following:
     subscribe() takes an optional second argument **callNow**, which
     defaults to true.  If it's true, it will run the callback immediately.
 
-  - <code>**.compute(**function() { ... }**)**</code>
-  
+  - <code>**.compute(**function() { … }**)**</code>
+
     Convenience method. The following are identical:
 
     ```
@@ -72,17 +71,26 @@ Observables also support the following:
 
     ```
     computed(function() {
-      return observable(
+      var value = observable();
+      return f(value);
     });
     ```
+
+  - <code>**.destroy()**</code>
+
+    Remove all subscribers from the observable.
+
+    If it's a computed, this will also remove the related subscriptions from
+    each of our dependencies.
 
 You can extend koel with new types of observable, if you need to send more
 specific updates than assignment. This is the mechanism used [by
 observableArray](#arrays).
 
-  - <code>**.on**(name, function() { ... }**)**</code>
+  - <code>**.subscribe**({ name: function() { … }, … }**)**</code>
 
-    Handle an event with the given name.
+    Handle an event with the given name. It takes a dict, so you can pass
+    multiple event handlers.
 
     emit() pops its name argument and calls each handler with the remaining
     arguments. Handlers are called in the order they were defined.
@@ -91,28 +99,26 @@ observableArray](#arrays).
 
     Emit an event describing a change to this observable.
 
-  - <code>**.changed()**</code>
-
-    Notify all subscribers that the observable changed.
-
-    Again, you should only use this if you're extending koel.
-
-Note that .assign() internally calls `.emit('assign', …)` followed by
-`.changed()`. By convention, extensions should behave similarly. So if you want
-to listen only for direct assignment events, use `.on('assign', …)`. To get all
-kinds of changes, use `.subscribe()` as usual.
+All events change the observable's value, so using `.subscribe()` will get you
+all kinds of changes. If you want to handle only direct assignment events --
+that is, calls to .assign() -- listen for the `'assign'` event.
 
 There are also the following methods on `ko` itself:
 
   - **`ko.observable()`** -- in case you want an observable function.
+
   - **`ko.computed()`** -- will fail if its argument *isn't* a function.
+
   - <code>**ko.subscribe(**v, function(value) { … }**)**</code> -- subscribe to
     v if its an observable, otherwise just pass it straight to the callback.
-    
+
     More efficient than the equivalent
-    `ko.observable(v).subscribe(function(value) { … })`.
+    `ko.observable(v).subscribe(function(value) { … })`, since it doesn't
+    create an observable if it doesn't need to.
+
   - **`ko.isObservable(v)`** -- is v an observable?
-  - **`ko.plugin()`** -- a simple way of extending `ko()`.
+
+  - **`ko.plugin()`** -- a simple way of extending the `ko()` function.
 
 
 ## el ##
@@ -141,7 +147,7 @@ of the last two arguments may be omitted.
     on the resulting DOM element.
 
     Example:
-        
+
         el('a', {
           href: 'http://google.com',
           target: '_blank',
@@ -232,14 +238,16 @@ Observable arrays have the following wrapper interface:
 
 You can get more interesting updates by listening for the following events:
 
-  - <code>.on(**'assign'**, function() { … })</code>
-  - <code>.on(**'replace'**, function() { … })</code>
-  - <code>.on(**'insert'**, function() { … })</code>
-  - <code>.on(**'remove'**, function() { … })</code>
+    animals.subscribe({
+      assign: function(newArray) { … },
+      replace: function(index, item) { … },
+      insert: function(index, item) { … },
+      remove: function(index) { … },
+    });
 
-Using `animals.subscribe()` would give you updates anytime the array changes
-for any reason. The **assign** handler will only fire when the entire array is
-replaced by calling .assign().
+Using `animals.subscribe(function() { … })` would give you updates anytime the
+array changes for any reason. The **assign** handler will only fire when the
+entire array is replaced by calling .assign().
 
 ### Derived arrays
 
@@ -279,23 +287,18 @@ Q&A
 ===
 
 Here are some questions. No-one's asked them yet, because koel's just a quick
-library I needed for a project. But the answers are helpful.
-
-How do I update an array?
--------------------------
-
-Use 
+library I needed for a project. But the answers may be helpful.
 
 What if an array element changes?
 ---------------------------------
 
 This is considered an array update:
 
-    array[1] = 4
+    array.replace(1, 'four');
 
 This is not:
 
-    array[1].fooBar = 6
+    array()[1].fooBar = 'six';
 
 An array tracks the objects _in_ it, not their _state_. It's just a list of pointers, if you like.
 
@@ -304,7 +307,7 @@ If you want to track element properties, make them into observables.
 Can I have an array of observables?
 -----------------------------------
 
-Nope. You'll get confused.
+Don't do that; you'll get confused.
 
 You could do this instead:
 

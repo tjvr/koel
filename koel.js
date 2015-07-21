@@ -44,10 +44,9 @@ var ko = (function() {
     if (this._value === newValue) return;
     this._value = newValue;
     this.emit('assign', newValue);
-    this.changed(newValue);
   };
 
-  Observable.prototype.changed = function(newValue) {
+  Observable.prototype._changed = function(newValue) {
     var newValue = newValue || this();
     this._subscribers.forEach(function(subscriber) {
       var cb = subscriber._notify || subscriber;
@@ -57,11 +56,20 @@ var ko = (function() {
 
   Observable.prototype.subscribe = function(subscriber, callNow) {
     var callNow = (callNow === undefined) ? true : !!callNow;
-    var cb = subscriber._notify || subscriber; // Observable or function
-    assertFunc(cb);
+    var cb;
+    if (typeof subscriber === 'object') {
+      for (name in subscriber) {
+        this.listeners[name] = this.listeners[name] || [];
+        this.listeners[name].push(subscriber[name]);
+      }
+      cb = subscriber.assign;
+    } else {
+      cb = subscriber._notify || subscriber; // Observable or function
+      assertFunc(cb);
+      this._subscribers.push(subscriber);
+    }
     // TODO: what's Knockout's approach to callNow?
-    this._subscribers.push(subscriber);
-    if (callNow) {
+    if (callNow && cb) {
       callSubscriber(cb, this._value);
     }
   };
@@ -80,20 +88,16 @@ var ko = (function() {
     this._subscribers.splice(index, 1); // remove
   };
 
-  /*
-   * remove all subscribers (& subscriptions, if a computed).
-   */
-  Observable.prototype.dispose = function(cb) {
+  Observable.prototype.destroy = function(cb) {
+    var _this = this;
     this._subscribers = [];
     this._dependencies.forEach(function(dep) {
-      dep.unsubscribe();
+      dep.unsubscribe(_this);
     });
     this._dependencies = [];
   }
 
-  Observable.prototype.on = function(name, cb) {
-    this.listeners[name] = this.listeners[name] || [];
-    this.listeners[name].push(cb);
+  Observable.prototype._on = function(name, cb) {
   };
 
   Observable.prototype.emit = function(name /* args */) {
@@ -102,6 +106,7 @@ var ko = (function() {
     (this.listeners[name] || []).forEach(function(cb) {
       cb.apply(_this, args);
     });
+    this._changed(this._value);
   };
 
   Observable.prototype.compute = function(func) {
@@ -163,6 +168,7 @@ var ko = (function() {
     if (v instanceof Observable) return v;
     return func(v);
   };
+  ko.Observable = Observable;
 
   ko.observable = observable;
   ko.computed = computed;
@@ -192,6 +198,26 @@ var ko = (function() {
 /*****************************************************************************/
 
 /*
+ * Boolean plugin
+ */
+
+ko.plugin(function(value, _super) {
+  var observable = _super(value);
+
+  if (typeof value === 'boolean') {
+    observable.negate = function() {
+      return this.compute(function(value) {
+        return !value;
+      });
+    }.bind(observable);
+  }
+
+  return observable;
+});
+
+/*****************************************************************************/
+
+/*
  * Array plugin
  */
 ko.plugin(function(value, _super) {
@@ -211,8 +237,8 @@ ko.plugin(function(value, _super) {
 
   var deriveds = {
     map: function(cb) {
-      var resultObservables;
-      
+      var resultObservables = [];
+
       function initial(array) {
         resultObservables = array.map(function(inputItem) {
           var observable = computed(cb, inputItem);
@@ -225,21 +251,7 @@ ko.plugin(function(value, _super) {
         });
       }
 
-      var derived = ko(initial(this()));
-
-      this.on('assign', function(array) {
-        derived.emit('assign', initial(array));
-        derived.changed();
-      });
-
-      this.on('replace', function(index, inputItem) {
-        resultObservables[index].dispose();
-        var observable = computed(cb, inputItem);
-        resultObservables[index] = observable;
-        var outputItem = observable();
-        derived._replace(index, outputItem);
-        subscribeTo(observable);
-      });
+      var derived = derivedArray();
 
       function subscribeTo(observable) {
         observable.subscribe(function(outputItem) {
@@ -249,25 +261,46 @@ ko.plugin(function(value, _super) {
         }, false);
       }
 
-      this.on('insert', function(index, inputItem) {
-        var observable = computed(cb, inputItem);
-        resultObservables.splice(index, 0, observable);
-        subscribeTo(observable);
-        var outputItem = observable();
-        derived._insert(index, outputItem);
+      this.subscribe({
+        assign: function(array) {
+          resultObservables.forEach(function(observable) {
+            observable.destroy();
+          });
+          derived._assign(initial(array));
+        },
+        replace: function(index, inputItem) {
+          resultObservables[index].destroy();
+          var observable = computed(cb, inputItem);
+          resultObservables[index] = observable;
+          var outputItem = observable();
+          derived._replace(index, outputItem);
+          subscribeTo(observable);
+        },
+        insert: function(index, inputItem) {
+          var observable = computed(cb, inputItem);
+          resultObservables.splice(index, 0, observable);
+          subscribeTo(observable);
+          var outputItem = observable();
+          derived._insert(index, outputItem);
+        },
+        remove: function(index) {
+          resultObservables[index].destroy();
+          resultObservables.splice(index, 1);
+          derived._remove(index);
+        },
       });
 
-      this.on('remove', function(index) {
-        resultObservables[index].dispose();
-        resultObservables.splice(index, 1);
-        derived._remove(index);
-      });
+      derived.destroy = function() {
+        resultObservables.forEach(function(observable) {
+          observable.destroy();
+        });
+        ko.g
+      }
 
       return derived;
     },
-
     filter: function(cb) {
-      var resultObservables;
+      var resultObservables = [];
 
       function initial(array) {
         resultObservables = array.map(function(item) {
@@ -282,27 +315,51 @@ ko.plugin(function(value, _super) {
         });
       }
 
-      var derived = ko(initial(this()));
+      var derived = derivedArray();
 
-      this.on('assign', function(array) {
-        derived.emit('assign', initial(array));
-        derived.changed();
-      });
-
-      this.on('replace', function(inputIndex, item) {
-        var previous = resultObservables[inputIndex]
-        var wasIncluded = previous();
-        previous.dispose();
-        var observable = computed(cb, item);
-        resultObservables[inputIndex] = observable;
-        var include = observable();
-        considerItem(wasIncluded, include, inputIndex, item);
-        subscribeTo(observable);
+      this.subscribe({
+        assign: function(array) {
+          resultObservables.forEach(function(observable) {
+            observable.destroy();
+          });
+          derived.assign(initial(array));
+        },
+        replace: function(inputIndex, item) {
+          var previous = resultObservables[inputIndex]
+          var wasIncluded = previous();
+          previous.destroy();
+          var observable = computed(cb, item);
+          resultObservables[inputIndex] = observable;
+          var include = observable();
+          considerItem(wasIncluded, include, inputIndex, item);
+          subscribeTo(observable);
+        },
+        insert: function(inputIndex, item) {
+          var observable = computed(cb, item);
+          resultObservables.splice(inputIndex, 0, observable);
+          subscribeTo(observable);
+          var include = observable();
+          if (include) {
+            var outputIndex = getOutputIndex(inputIndex);
+            derived._insert(outputIndex, item);
+          }
+        },
+        remove: function(inputIndex) {
+          var previous = resultObservables[inputIndex];
+          var wasIncluded = previous();
+          previous.destroy();
+          resultObservables.splice(inputIndex, 1);
+          if (wasIncluded) {
+            var outputIndex = getOutputIndex(inputIndex);
+            derived._remove(outputIndex);
+          }
+        },
       });
 
       function subscribeTo(observable) {
         observable.subscribe(function(include) {
           var inputIndex = resultObservables.indexOf(observable);
+          var item = resultObservables[inputIndex]();
           considerItem(!include, include, inputIndex, item);
         }, false);
       }
@@ -325,33 +382,26 @@ ko.plugin(function(value, _super) {
         }).length;
       }
 
-      this.on('insert', function(inputIndex, item) {
-        var observable = computed(cb, item);
-        resultObservables.splice(inputIndex, 0, observable);
-        subscribeTo(observable);
-        var outputIndex = getOutputIndex(inputIndex);
-        derived._insert(outputIndex, item);
-      });
-
-      this.on('remove', function(inputIndex) {
-        var previous = resultObservables[inputIndex];
-        var wasIncluded = previous();
-        previous.dispose();
-        resultObservables.splice(inputIndex, 1);
-        if (wasIncluded) {
-          var outputIndex = getOutputIndex(inputIndex);
-          derived._remove(outputIndex);
-        }
-      });
-
+      derived.destroy = function() {
+        resultObservables.forEach(function(observable) {
+          observable.destroy();
+        });
+      };
       return derived;
     },
   };
 
-  function fixDerivedArray(derived) {
-    for (key in events) { delete derived[key]; }
-    for (key in actions) { delete derived[key]; }
-    delete derived.replace;
+  function derivedArray() {
+    var derived = ko([]);
+    for (key in events) {
+      derived['_'+key] = derived[key];
+      delete derived[key];
+    }
+    for (key in actions) {
+      delete derived[key];
+    }
+    derived._assign = derived.assign;
+    delete derived.assign;
     return derived;
   }
 
@@ -362,13 +412,12 @@ ko.plugin(function(value, _super) {
     }.bind(array));
 
     Object.keys(events).forEach(function(key) {
-      array['_'+key] = array[key] = (function() {
+      array[key] = (function() {
         var func = events[key];
         var value = this();
         var args = [].slice.call(arguments);
         var result = func.apply(value, args);
         this.emit.apply(this, [key].concat(args));
-        this.changed();
         return result;
       }).bind(array);
     });
@@ -378,11 +427,7 @@ ko.plugin(function(value, _super) {
     });
 
     Object.keys(deriveds).forEach(function(key) {
-      array[key] = (function() {
-        var func = deriveds[key];
-        var derived = func.apply(this, arguments);
-        return fixDerivedArray(derived);
-      }).bind(array);
+      array[key] = deriveds[key].bind(array);
     });
   };
 
@@ -403,62 +448,97 @@ var el = (function() {
     'for': 'htmlFor',
     html: 'innerHTML',
     text: 'textContent',
-    value: 'value',
+    unselectable: 'unselectable',
+    value: 'value'
   };
 
   var booleanProperties = {
+    autofocus: 1,
     checked: 1,
     defaultChecked: 1,
     disabled: 1,
+    hidden: 1,
     multiple: 1,
+    readOnly: 1,
+    required: 1,
+    selected: 1
+  };
+
+  var bindingProperties = {
+    value: 1,
     selected: 1,
+    checked: 1,
   };
 
   function setProperty(el, key, value) {
-    var listener = null;
-    ko.subscribe(value, function(value) {
-      if (/^on_/.test(key)) {
-        if (listener) el.removeEventListener(key.slice(3), value, false);
-        el.addEventListener(key.slice(3), value, false);
-        listener = value;
+    var prop = directProperties[key];
+    if (prop) {
+      if (prop === 'className' && value instanceof Array) {
+        el.className = ''; // TODO class list properly
+        value.forEach(function(v) {
+          el.classList.add(v);
+        });
         return;
       }
+      el[prop] = (value == null ? '' : '' + value);
+    } else if (booleanProperties[key]) {
+      el[key] = !!value;
+    } else if (value == null) {
+      el.removeAttribute(key);
+    } else {
+      el.setAttribute(key, '' + value);
+    }
+  }
 
-      var prop = directProperties[key];
-      if (prop) {
-        if (prop === 'className' && value instanceof Array) {
-          el.className = ''; // TODO class list properly
-          value.forEach(function(v) {
-            el.classList.add(v);
-          });
-          return;
-        }
-        el[prop] = (value == null ? '' : '' + value);
-      } else if (booleanProperties[key]) {
-        if (value) {
-          el.setAttribute(key, '');
-        } else {
-          el.removeAttribute(key);
-        }
-      } else if (value == null) {
-        el.removeAttribute(key);
+  function getProperty(el, key) {
+    var prop = directProperties[key];
+    if (prop) {
+      return el[prop];
+    } else if (booleanProperties[key]) {
+      return !!el[key];
+    } else {
+      return el.getAttribute(key);
+    }
+  }
+
+  function bindProperty(el, key, value) {
+    if (/^on_/.test(key)) {
+      key = key.slice('on_'.length);
+      el.addEventListener(key, value);
+      return;
+    }
+
+    if (/^bind_/.test(key)) {
+      key = key.slice('bind_'.length);
+      if (!ko.isObservable(value)) {
+        throw "Can only bind observable";
+      } else if (!value.assign) {
+        throw "This observable can't be assigned";
+      } else if (!bindingProperties[key]) {
+        throw "Can't bind property: " + key;
       } else {
-        el.setAttribute(key, '' + value);
+        function update() {
+          value.assign(getProperty(el, key));
+        }
+        el.addEventListener('input', update);
+        el.addEventListener('change', update);
       }
+    }
+
+    ko.subscribe(value, function(value) {
+      setProperty(el, key, value);
     });
   };
 
   return function(selectors, attrs, content) {
     if (ko.isObservable(attrs) ||
         attrs instanceof Array ||
-        typeof attrs === "string" || (attrs && attrs.appendChild)
+        typeof attrs === 'string' || (attrs && attrs.appendChild)
     ) {
       content = attrs;
       attrs = {};
     }
     attrs = attrs || {};
-    var mayHaveContent = !(attrs.text || attrs.textContent || attrs.html ||
-                           attrs.innerHTML || attrs.innerText);
 
     var topParent;
     var result;
@@ -482,13 +562,15 @@ var el = (function() {
     });
 
     for (key in attrs) {
-      setProperty(result, key, attrs[key]);
+      bindProperty(result, key, attrs[key]);
     }
 
     if (!content) {
       return topParent;
     }
-    if (!mayHaveContent) {
+    var hasContent = (attrs.text || attrs.textContent || attrs.html ||
+                      attrs.innerHTML || attrs.innerText);
+    if (hasContent) {
       throw "Cannot use both attrs and children to set content";
     }
     content = ko.observable(content || []);
@@ -508,25 +590,25 @@ var el = (function() {
         return;
       }
       // Array
-      while (result.firstChild) result.removeChild(result.lastChild);
+      while (result.firstChild) {
+        result.removeChild(result.lastChild);
+      }
       children.forEach(function(child) {
         result.appendChild(makeChild(child));
       });
     }
 
-    content.on('assign', refresh);
-    refresh(content());
-
-    content.on('insert', function(index, newChild) {
-      result.insertBefore(makeChild(newChild), result.children[index]);
-    });
-
-    content.on('remove', function(index) {
-      result.removeChild(result.children[index]);
-    });
-
-    content.on('replace', function(index, newChild) {
-      result.replaceChild(result.children[index], makeChild(newChild));
+    content.subscribe({
+      assign: refresh,
+      insert: function(index, newChild) {
+        result.insertBefore(makeChild(newChild), result.children[index]);
+      },
+      remove: function(index) {
+        result.removeChild(result.children[index]);
+      },
+      replace: function(index, newChild) {
+        result.replaceChild(result.children[index], makeChild(newChild));
+      },
     });
 
     return topParent;
