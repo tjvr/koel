@@ -1,8 +1,8 @@
 var ko = (function() {
 
-  function assertFunc(v) {
-    if (typeof v !== 'function') throw "Not a function: " + v;
-  }
+  function assertFunction(v) { if (!isFunction(v)) throw "Not a function: " + v; }
+  function isFunction(v) { return typeof v === 'function' && !(v instanceof Observable); }
+  function isObservable(v) { return v instanceof Observable; }
 
   /* observable */
 
@@ -12,27 +12,27 @@ var ko = (function() {
     this._id = Observable.highestId++;
     this._value = initial;
     this._subscribers = [];
-    this.listeners = {};
+    this._listeners = {};
     // for computeds
     this._dependencies = [];
 
-    var foo = function() {
+    var OK = function() {
       if (arguments.length) throw "No arguments allowed!";
-      if (readCallback) readCallback(foo);
-      return foo.peek();
+      if (readCallback) readCallback(OK);
+      return OK.peek();
     };
 
-    delete foo.length;
-    foo.__proto__ = this;
+    delete OK.length;
+    OK.__proto__ = this;
     for (key in this) {
       if (typeof this[key] === 'function' && this[key].bind) {
-        foo[key] = this[key].bind(foo);
-      } else if (foo[key] !== this[key]) {
+        OK[key] = this[key].bind(OK);
+      } else if (OK[key] !== this[key]) {
         // extend, if setting proto doesn't work
-        foo[key] = this[key];
+        OK[key] = this[key];
       }
     }
-    return foo;
+    return OK;
   };
   Observable.highestId = 0;
 
@@ -46,12 +46,29 @@ var ko = (function() {
     this.emit('assign', newValue);
   };
 
+  Observable.prototype.emit = function(name /* args */) {
+    var _this = this;
+    var args = [].slice.call(arguments, 1);
+    var listeners = this._listeners[name] || [];
+    for (var i=0; i<listeners.length; i++) {
+      var cb = listeners[i];
+      cb.call(_this, this._value);
+    }
+    this._changed(this._value);
+  };
+
   Observable.prototype._changed = function(newValue) {
-    var newValue = newValue || this();
-    this._subscribers.forEach(function(subscriber) {
-      var cb = subscriber._notify || subscriber;
-      callSubscriber(cb, newValue);
-    });
+    var tmp = readCallback;
+    readCallback = null;
+
+    var subscribers = this._subscribers.slice();
+    for (var i=0; i<subscribers.length; i++) {
+      var s = subscribers[i];
+      var cb = s._notify || s;
+      cb.call(undefined, newValue);
+    }
+
+    readCallback = tmp;
   };
 
   Observable.prototype.subscribe = function(subscriber, callNow) {
@@ -59,29 +76,26 @@ var ko = (function() {
     var cb;
     if (typeof subscriber === 'object') {
       for (name in subscriber) {
-        this.listeners[name] = this.listeners[name] || [];
-        this.listeners[name].push(subscriber[name]);
+        assertFunction(subscriber[name]);
+        this._listeners[name] = this._listeners[name] || [];
+        this._listeners[name].push(subscriber[name]);
       }
       cb = subscriber.assign;
     } else {
       cb = subscriber._notify || subscriber; // Observable or function
-      assertFunc(cb);
+      assertFunction(cb);
       this._subscribers.push(subscriber);
     }
     // TODO: what's Knockout's approach to callNow?
     if (callNow && cb) {
-      callSubscriber(cb, this._value);
+      var tmp = readCallback;
+      readCallback = null;
+
+      cb.call(undefined, this._value);
+
+      readCallback = tmp;
     }
   };
-
-  function callSubscriber(cb, value) {
-    var tmp = readCallback;
-    readCallback = null;
-
-    cb.call(null, value);
-
-    readCallback = tmp;
-  }
 
   Observable.prototype.unsubscribe = function(cb) {
     var index = this._subscribers.indexOf(cb);
@@ -97,20 +111,8 @@ var ko = (function() {
     this._dependencies = [];
   }
 
-  Observable.prototype._on = function(name, cb) {
-  };
-
-  Observable.prototype.emit = function(name /* args */) {
-    var _this = this;
-    var args = [].slice.call(arguments, 1);
-    (this.listeners[name] || []).forEach(function(cb) {
-      cb.apply(_this, args);
-    });
-    this._changed(this._value);
-  };
-
   Observable.prototype.compute = function(func) {
-    assertFunc(func);
+    assertFunction(func);
     var _this = this;
     return computed(function() {
       return func(_this());
@@ -125,7 +127,7 @@ var ko = (function() {
   /* computed */
 
   var computed = function(func) {
-    assertFunc(func);
+    assertFunction(func);
     var args = [].slice.call(arguments, 1);
 
     var result = new Observable(undefined);
@@ -138,20 +140,33 @@ var ko = (function() {
     result._isComputing = false;
 
     function recompute() {
+      var newDependencies = [];
+      var tmp = readCallback;
+      readCallback = function(dep) {
+        if (newDependencies.indexOf(dep) !== -1) return;
+        newDependencies.push(dep);
+      };
+
+      var value;
       try {
-        var tmp = readCallback;
-        readCallback = function(other) {
-          if (result._dependencies.indexOf(other) !== -1) return;
-          result._dependencies.push(other);
-          other.subscribe(result, false);
-        };
-
-        var value = func.apply(null, args);
-        return value;
-
+        value = func.apply(undefined, args);
       } finally {
         readCallback = tmp;
       }
+
+      var oldDependencies = result._dependencies;
+      for (var i=0; i<oldDependencies.length; i++) {
+        oldDependencies[i].unsubscribe(result);
+      }
+      for (var i=0; i<newDependencies.length; i++) {
+        newDependencies[i].subscribe(result, false);
+      }
+      console.log(newDependencies.map(function(x) { return x._id; }),
+                  oldDependencies.map(function(x) { return x._id; }),
+                  newDependencies === oldDependencies);
+      result._dependencies = newDependencies;
+
+      return value;
     }
 
     _assign(recompute());
@@ -181,9 +196,8 @@ var ko = (function() {
     }
   };
 
-  ko.isObservable = function(v) {
-    return (v instanceof Observable);
-  };
+  ko.isObservable = isObservable;
+  ko.isFunction = isFunction;
 
   ko.plugin = function(cb) {
     var _super = func;
@@ -530,8 +544,15 @@ var el = (function() {
     });
   };
 
-  return function(selectors, attrs, content) {
-    if (ko.isObservable(attrs) ||
+  return function(selectors, attrs, content, callback) {
+    if (ko.isFunction(attrs)) {
+      callback = attrs;
+      attrs = {};
+      content = null;
+    } else if (ko.isFunction(content)) {
+      callback = content;
+      content = null;
+    } else if (ko.isObservable(attrs) ||
         attrs instanceof Array ||
         typeof attrs === 'string' || (attrs && attrs.appendChild)
     ) {
@@ -565,6 +586,8 @@ var el = (function() {
       bindProperty(result, key, attrs[key]);
     }
 
+    if (typeof callback === 'function') topParent._callback = callback;
+
     if (!content) {
       return topParent;
     }
@@ -576,26 +599,22 @@ var el = (function() {
     content = ko.observable(content || []);
 
     function makeChild(c) {
-      if (c.appendChild === undefined) {
-        c = document.createTextNode(c);
-      }
-      return c;
+      return c && c.appendChild ? c : document.createTextNode(c);
     }
 
     function refresh(children) {
-      if (children.appendChild) { // Element
+      if (!(children instanceof Array)) { // String or Element
         children = [children];
-      } else if (!(children instanceof Array)) { // String
-        result.textContent = children;
-        return;
       }
       // Array
       while (result.firstChild) {
         result.removeChild(result.lastChild);
       }
-      children.forEach(function(child) {
+      for (var i=0; i<children.length; i++) {
+        var child = children[i];
         result.appendChild(makeChild(child));
-      });
+        if (child && child._callback) child._callback.call(child, child);
+      }
     }
 
     content.subscribe({
@@ -607,7 +626,10 @@ var el = (function() {
         result.removeChild(result.children[index]);
       },
       replace: function(index, newChild) {
-        result.replaceChild(result.children[index], makeChild(newChild));
+        var oldChild = result.children[index];
+        result.insertBefore(makeChild(newChild), oldChild);
+        result.removeChild(oldChild);
+        // result.replaceChild(makeChild(newChild), result.children[index]);
       },
     });
 

@@ -34,6 +34,11 @@
     subscription to each dependency, and will re-compute the function when any
     of them change.
 
+    The return value of the function is used as the new value. Any subscribers
+    to the computed will be notified of the change.
+
+    The function should not return an Observable.
+
     Computeds are a kind of observable: you read from them in the same way. You
     may read from one computed inside another.
 
@@ -57,6 +62,8 @@ Observables also support the following:
     with the new value. This is useful when you want to run a function every
     time a value changes, but unlike a computed, the function doesn't produce a
     result.
+
+    The return value of the function is ignored.
 
     subscribe() takes an optional second argument **callNow**, which
     defaults to true.  If it's true, it will run the callback immediately.
@@ -105,7 +112,7 @@ that is, calls to .assign() -- listen for the `'assign'` event.
 
 There are also the following methods on `ko` itself:
 
-  - **`ko.observable()`** -- in case you want an observable function.
+  - **`ko.observable()`** -- in case you really want an observable function.
 
   - **`ko.computed()`** -- will fail if its argument *isn't* a function.
 
