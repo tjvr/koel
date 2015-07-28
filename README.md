@@ -46,6 +46,9 @@
 
 That's about it; observables and computeds make up the core of ko.
 
+
+### Additional Methods ###
+
 Observables also support the following:
 
   - <code>**.subscribe(**function() { … } _[_, callNow_]_**)**</code>
@@ -68,7 +71,7 @@ Observables also support the following:
     subscribe() takes an optional second argument **callNow**, which
     defaults to true.  If it's true, it will run the callback immediately.
 
-  - <code>**.compute(**function() { … }**)**</code>
+  - <code>**.compute(**function(value) { … }**)**</code>
 
     Convenience method. The following are identical:
 
@@ -90,6 +93,8 @@ Observables also support the following:
     If it's a computed, this will also remove the related subscriptions from
     each of our dependencies.
 
+### Extensions ###
+
 You can extend koel with new types of observable, if you need to send more
 specific updates than assignment. This is the mechanism used [by
 observableArray](#arrays).
@@ -109,6 +114,8 @@ observableArray](#arrays).
 All events change the observable's value, so using `.subscribe()` will get you
 all kinds of changes. If you want to handle only direct assignment events --
 that is, calls to .assign() -- listen for the `'assign'` event.
+
+### The ko object ###
 
 There are also the following methods on `ko` itself:
 
