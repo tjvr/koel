@@ -161,9 +161,6 @@ var ko = (function() {
       for (var i=0; i<newDependencies.length; i++) {
         newDependencies[i].subscribe(result, false);
       }
-      console.log(newDependencies.map(function(x) { return x._id; }),
-                  oldDependencies.map(function(x) { return x._id; }),
-                  newDependencies === oldDependencies);
       result._dependencies = newDependencies;
 
       return value;
