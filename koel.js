@@ -15,6 +15,7 @@ var ko = (function() {
     this._listeners = {};
     // for computeds
     this._dependencies = [];
+    this._isChanging = false;
 
     var OK = function() {
       if (arguments.length) throw "No arguments allowed!";
@@ -43,7 +44,11 @@ var ko = (function() {
   Observable.prototype.assign = function(newValue) {
     if (this._value === newValue) return;
     this._value = newValue;
+
+    if (this._isChanging) return;
+    this._isChanging = true;
     this.emit('assign', newValue);
+    this._isChanging = false;
   };
 
   Observable.prototype.emit = function(name /* args */) {
@@ -221,6 +226,10 @@ ko.plugin(function(value, _super) {
         return !value;
       });
     }.bind(observable);
+
+    observable.toggle = function() {
+      this.assign(!this());
+    }.bind(observable);
   }
 
   return observable;
@@ -236,13 +245,16 @@ ko.plugin(function(value, _super) {
 
   var events = {
     insert: function(index, item)  { this.splice(index, 0, item); },
-    replace: function(index, item) { return this.splice(index, 1, item); },
+    replace: function(index, item) {
+      if (this[index] === item) return;
+      return this.splice(index, 1, item);
+    },
     remove: function(index)        { return this.splice(index, 1); },
   };
 
   var actions = {
     push: function(item) { return this.insert(this.length(), item); },
-    pop: function()      { return this.remove(this.length() - 1, item); },
+    pop: function()      { return this.remove(this.length() - 1); },
     shift: function()  { return this.remove(0); },
   };
 
@@ -578,6 +590,8 @@ var el = (function() {
       if (result) result.appendChild(el);
       result = el;
     });
+
+    // TODO: warn if both className and classList set
 
     for (key in attrs) {
       bindProperty(result, key, attrs[key]);
