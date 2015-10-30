@@ -499,10 +499,8 @@ var el = (function() {
 
   function bindClass(el, value, extraClasses) {
     ko.subscribe(value, function(value) {
-      delete el.className; // TODO class list properly
-      if (typeof value === "string") {
-        value = value ? value.split(/ +/g) : [];
-      }
+      if (typeof value === "string") value = value.split(/ +/g);
+      el.className = ''; // TODO class list properly
       (value || []).concat(extraClasses).forEach(function(v) {
         el.classList.add(v);
       });
