@@ -87,7 +87,7 @@ var ko = (function() {
       }
       cb = subscriber.assign;
     } else {
-      cb = subscriber._notify || subscriber; // Observable or function
+      cb = subscriber._notify || subscriber; // Computed or function
       assertFunction(cb);
       this._subscribers.push(subscriber);
     }
@@ -135,14 +135,7 @@ var ko = (function() {
     assertFunction(func);
     var args = [].slice.call(arguments, 1);
 
-    var result = new Observable(undefined);
-    var _assign = result.assign;
-    delete result.assign;
-    result._notify = function() {
-      if (this._isComputing) return;
-      _assign(recompute());
-    }.bind(result);
-    result._isComputing = false;
+    var result;
 
     function recompute() {
       var newDependencies = [];
@@ -159,10 +152,22 @@ var ko = (function() {
         readCallback = tmp;
       }
 
-      var oldDependencies = result._dependencies;
-      for (var i=0; i<oldDependencies.length; i++) {
-        oldDependencies[i].unsubscribe(result);
+      if (result) {
+        // Unsubscribe from old dependencies
+        var oldDependencies = result._dependencies;
+        for (var i=0; i<oldDependencies.length; i++) {
+          oldDependencies[i].unsubscribe(result);
+        }
       }
+
+      if (!result) {
+        // Make sure the observable is initialised with the initial value
+        result = ko(value);
+        // This makes sure subscribe works. Should never actually be called!
+        result._notify = function() { assert(false); }
+      }
+
+      // Subscribe new dependencies
       for (var i=0; i<newDependencies.length; i++) {
         newDependencies[i].subscribe(result, false);
       }
@@ -171,7 +176,20 @@ var ko = (function() {
       return value;
     }
 
-    _assign(recompute());
+    // Compute initial value & create observable
+    recompute();
+
+    // Computables can't be assigned
+    var _assign = result.assign;
+    delete result.assign;
+
+    result._isComputing = false;
+
+    result._notify = function() {
+      if (this._isComputing) return;
+      _assign(recompute());
+    }.bind(result);
+
     return result;
   };
 
