@@ -18,7 +18,7 @@ var ko = (function() {
     this._isChanging = false;
 
     var OK = function() {
-      if (arguments.length) throw "No arguments allowed!";
+      if (arguments.length) throw "No arguments allowed! Did you mean .assign()";
       if (readCallback) readCallback(OK);
       return OK.peek();
     };
@@ -383,10 +383,12 @@ ko.plugin(function(value, _super) {
         },
       });
 
+      var self = this;
       function subscribeTo(observable) {
         observable.subscribe(function(include) {
           var inputIndex = resultObservables.indexOf(observable);
-          var item = resultObservables[inputIndex]();
+          var array = self();
+          var item = array[inputIndex];
           considerItem(!include, include, inputIndex, item);
         }, false);
       }
@@ -497,8 +499,10 @@ var el = (function() {
 
   function bindClass(el, value, extraClasses) {
     ko.subscribe(value, function(value) {
-      if (typeof value === "string") value = value.split(/ +/g);
-      el.className = ''; // TODO class list properly
+      delete el.className; // TODO class list properly
+      if (typeof value === "string") {
+        value = value ? value.split(/ +/g) : [];
+      }
       (value || []).concat(extraClasses).forEach(function(v) {
         el.classList.add(v);
       });
