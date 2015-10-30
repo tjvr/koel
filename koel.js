@@ -520,6 +520,7 @@ var el = (function() {
       if (typeof value === "string") value = value.split(/ +/g);
       el.className = ''; // TODO class list properly
       (value || []).concat(extraClasses).forEach(function(v) {
+        if (!v) return;
         el.classList.add(v);
       });
     });
