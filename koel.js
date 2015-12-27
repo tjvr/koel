@@ -518,7 +518,7 @@ var el = (function() {
   function bindClass(el, value, extraClasses) {
     ko.subscribe(value, function(value) {
       if (typeof value === "string") value = value.split(/ +/g);
-      el.className = ''; // TODO class list properly
+      el.removeAttribute('class'); // TODO properly set class list
       (value || []).concat(extraClasses).forEach(function(v) {
         if (!v) return;
         el.classList.add(v);
@@ -551,6 +551,7 @@ var el = (function() {
   }
 
   function bindProperty(el, key, value) {
+    if (value === undefined) throw "undefined value";
     if (/^on_/.test(key)) {
       key = key.slice('on_'.length);
       el.addEventListener(key, value);
@@ -582,15 +583,26 @@ var el = (function() {
     });
   };
 
-  return function(selectors, attrs, content) {
-    if (ko.isObservable(attrs) ||
-        attrs instanceof Array ||
-        typeof attrs === 'string' || (attrs && attrs.appendChild)
+  var el;
+  return el = function(selectors, value) {
+    if (arguments.length > 2) throw "too many arguments";
+    if (selectors === undefined) throw "undefined selectors";
+
+    var content, attrs;
+    if (ko.isObservable(value) ||
+        value instanceof Array ||
+        typeof value === 'string' || (value && value.appendChild)
     ) {
-      content = attrs;
+      content = value;
       attrs = {};
+    } else {
+      attrs = value || {};
+      content = null;
+      if (attrs.children) {
+        content = attrs.children || [];
+        delete attrs.children;
+      }
     }
-    attrs = attrs || {};
 
     var extraClasses = [];
 
@@ -635,14 +647,16 @@ var el = (function() {
     if (!content) {
       return topParent;
     }
-    var hasContent = (attrs.text || attrs.textContent || attrs.html ||
-                      attrs.innerHTML || attrs.innerText);
-    if (hasContent) {
-      throw "Cannot use both attrs and children to set content";
+
+    if (!ko.isObservable(content)) {
+      if (content === undefined) throw "undefined children";
+      content = content || [];
+      refresh(content);
+      return topParent;
     }
-    content = ko.observable(content || []);
 
     function makeChild(c) {
+      if (c === undefined) throw "undefined child";
       return c && c.appendChild ? c : document.createTextNode(c);
     }
 
