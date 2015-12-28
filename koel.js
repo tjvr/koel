@@ -77,6 +77,7 @@ var ko = (function() {
   };
 
   Observable.prototype.subscribe = function(subscriber, callNow) {
+    if (subscriber === undefined) throw "undefined subscriber";
     var callNow = (callNow === undefined) ? true : !!callNow;
     var cb;
     if (typeof subscriber === 'object') {
@@ -519,7 +520,7 @@ var el = (function() {
     ko.subscribe(value, function(value) {
       if (typeof value === "string") value = value.split(/ +/g);
       el.removeAttribute('class'); // TODO properly set class list
-      (value || []).concat(extraClasses).forEach(function(v) {
+      extraClasses.concat(value || []).forEach(function(v) {
         if (!v) return;
         el.classList.add(v);
       });
