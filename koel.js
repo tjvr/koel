@@ -8,7 +8,7 @@ var ko = (function() {
     return v instanceof Observable;
   }
   function isComputed(v) {
-    return v instanceof Observable && v._isComputed;
+    return v instanceof Observable && !v.assign;
   }
 
   /* observable */
@@ -41,23 +41,26 @@ var ko = (function() {
         OK[key] = this[key];
       }
     }
+
+    var _this = OK;
+    // assign is attached to the object itself, because then we can `delete` it
+    OK.assign = function(newValue) {
+      if (_this._value === newValue) return;
+      var oldValue = _this._value;
+      _this._value = newValue;
+
+      if (_this._isChanging) return;
+      _this._isChanging = true;
+      _this.emit('assign', newValue, oldValue);
+      _this._isChanging = false;
+    };
+
     return OK;
   };
   Observable.highestId = 0;
 
   Observable.prototype.peek = function() {
     return this._value;
-  };
-
-  Observable.prototype.assign = function(newValue) {
-    if (this._value === newValue) return;
-    var oldValue = this._value;
-    this._value = newValue;
-
-    if (this._isChanging) return;
-    this._isChanging = true;
-    this.emit('assign', newValue, oldValue);
-    this._isChanging = false;
   };
 
   Observable.prototype.emit = function(name /* args */) {
@@ -195,6 +198,7 @@ var ko = (function() {
     // Computables can't be assigned
     var _assign = result.assign;
     delete result.assign;
+    assert(!result.assign);
 
     result._isComputing = false;
 
