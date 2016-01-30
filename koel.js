@@ -1,4 +1,5 @@
 var ko = (function() {
+  'use strict';
 
   function assertFunction(v) { if (!isFunction(v)) throw "Not a function: " + v; }
   function isFunction(v) {
@@ -94,7 +95,7 @@ var ko = (function() {
     var callNow = (callNow === undefined) ? true : !!callNow;
     var cb;
     if (typeof subscriber === 'object') {
-      for (name in subscriber) {
+      for (var name in subscriber) {
         assertFunction(subscriber[name]);
         this._listeners[name] = this._listeners[name] || [];
         this._listeners[name].push(subscriber[name]);
@@ -142,6 +143,9 @@ var ko = (function() {
     if (v instanceof Observable) return v;
     return new Observable(v);
   };
+
+  var _test = observable();
+  if (!_test.emit) throw "koel not supported";
 
   /* computed */
 
