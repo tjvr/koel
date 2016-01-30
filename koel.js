@@ -33,7 +33,7 @@ var ko = (function() {
 
     delete OK.length;
     OK.__proto__ = this;
-    for (key in this) {
+    for (var key in this) {
       if (typeof this[key] === 'function' && this[key].bind) {
         OK[key] = this[key].bind(OK);
       } else if (OK[key] !== this[key]) {
