@@ -32,16 +32,7 @@ var ko = (function() {
       return OK.peek();
     };
 
-    delete OK.length;
     OK.__proto__ = this;
-    for (var key in this) {
-      if (typeof this[key] === 'function' && this[key].bind) {
-        OK[key] = this[key].bind(OK);
-      } else if (OK[key] !== this[key]) {
-        // extend, if setting proto doesn't work
-        OK[key] = this[key];
-      }
-    }
 
     var _this = OK;
     // assign is attached to the object itself, because then we can `delete` it
