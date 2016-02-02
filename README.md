@@ -141,8 +141,7 @@ There are also the following methods on `ko` itself:
 
 For background, read the [blog post about Sugared DOM](http://blog.fastmail.com/2012/02/20/building-the-new-ajax-mail-ui-part-2-better-than-templates-building-highly-dynamic-web-pages/), which this function is based on.
 
-el takes three arguments: `selector`, `attrs`, and `children`. Either or both
-of the last two arguments may be omitted.
+el takes two arguments: the first is `selector`, and the second is either `attrs` or `children`.
 
   - **`selector`** looks like a CSS selector. It consists of a tag name,
     followed by `#the-id` and then many `.class-names`. Any of them may
@@ -165,7 +164,8 @@ of the last two arguments may be omitted.
         el('a', {
           href: 'http://google.com',
           target: '_blank',
-        }, "follow this link");
+          text: "follow this link",
+        });
 
     The following property aliases are supported: `class` `className`
     `defaultValue` `for` `html` `text` `value`
@@ -187,17 +187,13 @@ of the last two arguments may be omitted.
           on_click: function(event) {
             // do stuff
           },
-        }, "click me");
+          text: "click me",
+        });
 
-  - **`children`** is a string or an array.
-
-    If it's a string, it will be used instead of the `textContent` property.
-    (You may not set the text both ways on the same element.)
-
-    Otherwise, each element of the array is either a string or a DOM element.
+  - **`children`** is an array. Each item is either a string or a DOM element.
     Strings will be converted into text nodes.
 
-    children may be an observable.
+    `children` may be an observable.
 
     Examples:
 
@@ -213,6 +209,17 @@ of the last two arguments may be omitted.
         el('ul', cheeses);
 
         cheeses.push('camembert');
+
+You can pass `children` as a property of `attrs`:
+
+    el('ul.cheeses', {
+      on_click: function(event) {
+        // do stuff
+      },
+      children: cheeseObjects.map(function(name) {
+        return el('li', name);
+      }),
+    });
 
 
 ## Arrays ##
@@ -382,5 +389,5 @@ Shut up, Dan.
 License
 =======
 
-MIT. (It's small enough that you could always rewrite it yourself anyway.)
+MIT. Not that you want to use it anyway.
 
