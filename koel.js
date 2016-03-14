@@ -1,12 +1,21 @@
 var ko = (function() {
+  'use strict';
 
   function assertFunction(v) { if (!isFunction(v)) throw "Not a function: " + v; }
-  function isFunction(v) { return typeof v === 'function' && !(v instanceof Observable); }
-  function isObservable(v) { return v instanceof Observable; }
+  function isFunction(v) {
+    return typeof v === 'function' && !(v instanceof Observable);
+  }
+  function isObservable(v) {
+    return v instanceof Observable;
+  }
+  function isComputed(v) {
+    return v instanceof Observable && !v.assign;
+  }
 
   /* observable */
 
   var readCallback;
+  var watchCallback;
 
   var Observable = function(initial) {
     this._id = Observable.highestId++;
@@ -23,32 +32,27 @@ var ko = (function() {
       return OK.peek();
     };
 
-    delete OK.length;
     OK.__proto__ = this;
-    for (key in this) {
-      if (typeof this[key] === 'function' && this[key].bind) {
-        OK[key] = this[key].bind(OK);
-      } else if (OK[key] !== this[key]) {
-        // extend, if setting proto doesn't work
-        OK[key] = this[key];
-      }
-    }
+
+    var _this = OK;
+    // assign is attached to the object itself, because then we can `delete` it
+    OK.assign = function(newValue) {
+      if (_this._value === newValue) return;
+      var oldValue = _this._value;
+      _this._value = newValue;
+
+      if (_this._isChanging) return;
+      _this._isChanging = true;
+      _this.emit('assign', newValue, oldValue);
+      _this._isChanging = false;
+    };
+
     return OK;
   };
   Observable.highestId = 0;
 
   Observable.prototype.peek = function() {
     return this._value;
-  };
-
-  Observable.prototype.assign = function(newValue) {
-    if (this._value === newValue) return;
-    this._value = newValue;
-
-    if (this._isChanging) return;
-    this._isChanging = true;
-    this.emit('assign', newValue);
-    this._isChanging = false;
   };
 
   Observable.prototype.emit = function(name /* args */) {
@@ -60,6 +64,7 @@ var ko = (function() {
       cb.apply(_this, args);
     }
     this._changed(this._value);
+    if (watchCallback) watchCallback(this, name, args);
   };
 
   Observable.prototype._changed = function(newValue) {
@@ -77,10 +82,11 @@ var ko = (function() {
   };
 
   Observable.prototype.subscribe = function(subscriber, callNow) {
+    if (subscriber === undefined) throw "undefined subscriber";
     var callNow = (callNow === undefined) ? true : !!callNow;
     var cb;
     if (typeof subscriber === 'object') {
-      for (name in subscriber) {
+      for (var name in subscriber) {
         assertFunction(subscriber[name]);
         this._listeners[name] = this._listeners[name] || [];
         this._listeners[name].push(subscriber[name]);
@@ -129,6 +135,9 @@ var ko = (function() {
     return new Observable(v);
   };
 
+  var _test = observable();
+  if (!_test.emit) throw "koel not supported";
+
   /* computed */
 
   var computed = function(func) {
@@ -163,6 +172,8 @@ var ko = (function() {
       if (!result) {
         // Make sure the observable is initialised with the initial value
         result = ko(value);
+        result._isComputed = true;
+
         // This makes sure subscribe works. Should never actually be called!
         result._notify = function() { assert(false); }
       }
@@ -182,6 +193,7 @@ var ko = (function() {
     // Computables can't be assigned
     var _assign = result.assign;
     delete result.assign;
+    assert(!result.assign);
 
     result._isComputing = false;
 
@@ -222,6 +234,7 @@ var ko = (function() {
 
   ko.isObservable = isObservable;
   ko.isFunction = isFunction;
+  ko.isComputed = isComputed;
 
   ko.plugin = function(cb) {
     var _super = func;
@@ -229,6 +242,16 @@ var ko = (function() {
       return cb(v, _super);
     };
   };
+
+  ko.watch = function(func, cb) {
+    var tmp = watchCallback;
+    watchCallback = cb;
+
+    func();
+
+    watchCallback = tmp;
+  };
+
   return ko;
 
 }());
@@ -269,9 +292,9 @@ ko.plugin(function(value, _super) {
     insert: function(index, item)  { this.splice(index, 0, item); },
     replace: function(index, item) {
       if (this[index] === item) return;
-      return this.splice(index, 1, item);
+      return this.splice(index, 1, item)[0];
     },
-    remove: function(index)        { return this.splice(index, 1); },
+    remove: function(index)        { return this.splice(index, 1)[0]; },
   };
 
   var actions = {
@@ -464,6 +487,7 @@ ko.plugin(function(value, _super) {
         var value = this();
         var args = [].slice.call(arguments);
         var result = func.apply(value, args);
+        args.push(result);
         this.emit.apply(this, [key].concat(args));
         return result;
       }).bind(array);
@@ -518,8 +542,8 @@ var el = (function() {
   function bindClass(el, value, extraClasses) {
     ko.subscribe(value, function(value) {
       if (typeof value === "string") value = value.split(/ +/g);
-      el.className = ''; // TODO class list properly
-      (value || []).concat(extraClasses).forEach(function(v) {
+      el.removeAttribute('class'); // TODO properly set class list
+      extraClasses.concat(value || []).forEach(function(v) {
         if (!v) return;
         el.classList.add(v);
       });
@@ -551,6 +575,7 @@ var el = (function() {
   }
 
   function bindProperty(el, key, value) {
+    if (value === undefined) throw "undefined value";
     if (/^on_/.test(key)) {
       key = key.slice('on_'.length);
       el.addEventListener(key, value);
@@ -582,15 +607,26 @@ var el = (function() {
     });
   };
 
-  return function(selectors, attrs, content) {
-    if (ko.isObservable(attrs) ||
-        attrs instanceof Array ||
-        typeof attrs === 'string' || (attrs && attrs.appendChild)
+  var el;
+  return el = function(selectors, value) {
+    if (arguments.length > 2) throw "too many arguments";
+    if (selectors === undefined) throw "undefined selectors";
+
+    var content, attrs;
+    if (ko.isObservable(value) ||
+        value instanceof Array ||
+        typeof value === 'string' || (value && value.appendChild)
     ) {
-      content = attrs;
+      content = value;
       attrs = {};
+    } else {
+      attrs = value || {};
+      content = null;
+      if (attrs.children) {
+        content = attrs.children || [];
+        delete attrs.children;
+      }
     }
-    attrs = attrs || {};
 
     var extraClasses = [];
 
@@ -635,14 +671,16 @@ var el = (function() {
     if (!content) {
       return topParent;
     }
-    var hasContent = (attrs.text || attrs.textContent || attrs.html ||
-                      attrs.innerHTML || attrs.innerText);
-    if (hasContent) {
-      throw "Cannot use both attrs and children to set content";
+
+    if (!ko.isObservable(content)) {
+      if (content === undefined) throw "undefined children";
+      content = content || [];
+      refresh(content);
+      return topParent;
     }
-    content = ko.observable(content || []);
 
     function makeChild(c) {
+      if (c === undefined) throw "undefined child";
       return c && c.appendChild ? c : document.createTextNode(c);
     }
 
