@@ -153,7 +153,7 @@ var Oops = (function() {
     Oops.redoStack.push(reversed);
 
     // refresh undo/redo state
-    Host.onOops();
+    Oops._emit('undo');
   };
 
   Oops.redo = function() {
@@ -163,7 +163,7 @@ var Oops = (function() {
     Oops.undoStack.push(reversed);
 
     // refresh undo/redo state
-    Host.onOops();
+    Oops._emit('redo');
   };
 
   Oops.insert = function(op) {
@@ -176,7 +176,7 @@ var Oops = (function() {
     Oops.redoStack = [];
 
     // refresh undo/redo state
-    Host.onOops();
+    Oops._emit('done');
   };
 
   Oops.canUndo = function() {
@@ -189,7 +189,19 @@ var Oops = (function() {
   Oops.reset = function() {
     Oops.undoStack = [];
     Oops.redoStack = [];
-    Host.onOops();
+    Oops._emit('reset');
+  };
+
+
+  // event emitter
+  Oops._handlers = [];
+  Oops.onOops = function(cb) {
+    Oops._handlers.push(cb);
+  };
+  Oops._emit = function(name) {
+    Oops._handlers.forEach(function(cb) {
+      cb(name);
+    });
   };
 
 
@@ -197,4 +209,3 @@ var Oops = (function() {
   return Oops;
 
 })();
-
