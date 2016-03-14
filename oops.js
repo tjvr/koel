@@ -17,7 +17,7 @@ var Oops = (function() {
       if (!this.remove) return;
       this.remove(index);
     },
-  }
+  };
 
 
   // Operation -- a list of events
@@ -132,19 +132,20 @@ var Oops = (function() {
     Oops._view = func;
   };
 
+
+  // undo pops from stack, pushes reverse operation onto redo stack
+  // vv. redo pops stack, pushes reverse onto undo stack
+  // insert() clears redo stack
+
   Oops.undoStack = [];
   Oops.redoStack = [];
 
   function copyForStore(value) {
     if (ko.isObservable(value)) value = value();
     if (value && value.constructor === Array) value = value.slice();
+    // TODO support mutating objects?
     return value;
   }
-
-  Oops._reverse = function(operation) {
-    var reversed = Oops._watch(Operation.undo);
-    return reversed;
-  };
 
   Oops.undo = function() {
     if (!Oops.undoStack.length) return;
@@ -195,17 +196,18 @@ var Oops = (function() {
 
   // event emitter
   Oops._handlers = [];
-  Oops.onOops = function(cb) {
-    Oops._handlers.push(cb);
-  };
   Oops._emit = function(name) {
     Oops._handlers.forEach(function(cb) {
       cb(name);
     });
   };
+  Oops.onOops = function(cb) {
+    Oops._handlers.push(cb);
+  };
 
 
   Oops.CustomOperation = CustomOperation;
+  Oops.actions = actions;
   return Oops;
 
 })();
