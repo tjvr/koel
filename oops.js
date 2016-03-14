@@ -80,22 +80,33 @@ var Oops = (function() {
 
   /* run a function and log each observable event */
   Oops._watch = function(func) {
+    // don't call undo/redo() from inside an Oops() call
     assert(!Oops.undoing);
 
-    // save active sprite & tab
-    var wasActive = App.active();
-    var wasTab = App.tab();
+    // save active view observables
+    var viewObservables = Oops._view();
+    var observableValues = viewObservables.map(function(o) {
+      return {
+        observable: o,
+        value: o(),
+      };
+    });
     var after = function() {
-      App.active.assign(wasActive);
-      App.tab.assign(wasTab);
+      observableValues.forEach(function(d) {
+        d.observable.assign(d.value);
+      });
     };
 
+    // track observable changes
     var events = [];
     ko.watch(func, function(observable, operation, args) {
       // ignore computeds & UI scope
       if (ko.isComputed(observable)) return;
-      if (observable === App.active || observable === App.tab) {
-        after = null; // probably a "replace project" operation
+      if (viewObservables.indexOf(observable) > -1) {
+        // if the view changes during the operation,
+        // we can't meaningfully restore it after undo/redo
+        after = null;
+        // eg. a "replace project" operation in tosh
       }
 
       // save the event that was emitted
@@ -108,6 +119,17 @@ var Oops = (function() {
 
     if (!events.length) return;
     return new Operation(events, after);
+  };
+
+  // `view` returns a list of observables describing the current view state
+  // so we can restore it after undo/redo
+  //
+  // eg. active sprite & active tab in tosh
+  Oops._view = function() {
+    return [];
+  };
+  Oops.setView = function(func) {
+    Oops._view = func;
   };
 
   Oops.undoStack = [];
