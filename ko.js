@@ -1,6 +1,12 @@
 var ko = (function() {
   'use strict';
 
+  function assert(x, message) {
+    if (!x) {
+      throw new Error("Assertion failed: " + (message || ''));
+    }
+  }
+
   function assertFunction(v) { if (!isFunction(v)) throw "Not a function: " + v; }
   function isFunction(v) {
     return typeof v === 'function' && !(v instanceof Observable);
