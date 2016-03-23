@@ -294,7 +294,7 @@ ko.plugin(function(value, _super) {
       if (this[index] === item) return;
       return this.splice(index, 1, item)[0];
     },
-    remove: function(index)        { return this.splice(index, 1)[0]; },
+    remove: function(index)        { assert(0 <= index && index < this.length); return this.splice(index, 1)[0]; },
   };
 
   var actions = {
