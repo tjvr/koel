@@ -637,7 +637,7 @@ var el = (function() {
       var tagName = parts[0] || 'div';
       var el = document.createElement(tagName);
 
-      for (i=1, j=2; j < parts.length; i+=2, j+=2) {
+      for (var i=1, j=2; j < parts.length; i+=2, j+=2) {
         var value = parts[j];
         if (parts[i] == '#') {
           if (attrs.id) throw "Can't specify id twice";
