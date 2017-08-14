@@ -11,23 +11,31 @@
 
 **ko** is a tiny data binding library. It lets you make two things:
 
-- **Observables**, which wrap a value (such as a string or a number).
+  - **Observables**, which wrap a value (such as a string or a number).
 
-        var fruitOfTheDay = ko('banana');
+    ```js
+    var fruitOfTheDay = ko('banana');
+    ```
 
       - To **read** from an observable, call it like you would a function:
 
-            fruitOfTheDay(); // => 'banana'
+        ```js
+        fruitOfTheDay(); // => 'banana'
+        ```
 
       - To **write** to an observable, use `.assign()`.
 
-            fruitOfTheDay.assign('melon');
+        ```js
+        fruitOfTheDay.assign('melon');
+        ```
 
 - **Computeds**, which wrap a function.
 
-        var lunch = ko(function() {
-          return soupOfTheDay() + ' followed by ' + fruitOfTheDay();
-        });
+    ```js
+    var lunch = ko(function() {
+      return soupOfTheDay() + ' followed by ' + fruitOfTheDay();
+    });
+    ```
 
     ko does **dependency detection**: while the function is executing, it
     remembers every observable which the computed reads from. It sets up a
@@ -55,7 +63,7 @@ Observables also support the following:
 
     Explicitly subscribe to the observable.
 
-    ```
+    ```js
     fruitOfTheDay.subscribe(function(fruit) {
       document.title = fruit;
     });
@@ -75,11 +83,11 @@ Observables also support the following:
 
     Convenience method. The following are identical:
 
-    ```
+    ```js
     observable.compute(f)
     ```
 
-    ```
+    ```js
     computed(function() {
       var value = observable();
       return f(value);
@@ -150,22 +158,26 @@ of the last two arguments may be omitted.
 
     Examples:
 
-        el('span');       // => <span />
-        el('.hat-shop');  // => <div class="hat-shop" />
-        el('');           // => <div />
+    ```js
+    el('span');       // => <span />
+    el('.hat-shop');  // => <div class="hat-shop" />
+    el('');           // => <div />
 
-        el('div#main.blue.very-big');
-        // => <div id="main" class="blue very-big" />
+    el('div#main.blue.very-big');
+    // => <div id="main" class="blue very-big" />
+    ```
 
   - **`attrs`** is a dictionary of attributes. These will be set as attributes
     on the resulting DOM element.
 
     Example:
 
-        el('a', {
-          href: 'http://google.com',
-          target: '_blank',
-        }, "follow this link");
+    ```js
+    el('a', {
+      href: 'http://google.com',
+      target: '_blank',
+    }, "follow this link");
+    ```
 
     The following property aliases are supported: `class` `className`
     `defaultValue` `for` `html` `text` `value`
@@ -183,11 +195,13 @@ of the last two arguments may be omitted.
     To bind **event handlers**, use special <code>on_*«event»*</code>
     attributes:
 
-        el('button', {
-          on_click: function(event) {
-            // do stuff
-          },
-        }, "click me");
+    ```js
+    el('button', {
+      on_click: function(event) {
+        // do stuff
+      },
+    }, "click me");
+    ```
 
   - **`children`** is a string or an array.
 
@@ -201,18 +215,22 @@ of the last two arguments may be omitted.
 
     Examples:
 
-        el('h1', "Hi there!");  // => <h1>Hi there!</h1>
+    ```js
+    el('h1', "Hi there!");  // => <h1>Hi there!</h1>
 
-        var score = ko(6);
-        el('p', ['You have ', el('span', score), ' new messages!']);
-        // => <p>You have <span>6</span> new messages!</p>
+    var score = ko(6);
+    el('p', ['You have ', el('span', score), ' new messages!']);
+    // => <p>You have <span>6</span> new messages!</p>
+    ```
 
     Final example, using [observable arrays](#arrays):
 
-        var cheeses = ko(['cheddar', 'stilton', 'brie']);
-        el('ul', cheeses);
+    ```js
+    var cheeses = ko(['cheddar', 'stilton', 'brie']);
+    el('ul', cheeses);
 
-        cheeses.push('camembert');
+    cheeses.push('camembert');
+    ```
 
 
 ## Arrays ##
@@ -222,20 +240,22 @@ koel has a bonus third part: **observable arrays**.
 Plain observable arrays wouldn't be that useful, since you wouldn't be able to
 tell what changed.
 
-    var animals = ko([
-      'cow',
-      'sheep',
-      'horse',
-    ]);
-    function addPillow() {
-      animals.assign(animals.concat(['pillow']));
-    }
-    animals.subscribe(function(newArray) {
-      /*
-       * we have the new array -- but what changed?!
-       */
-    });
-    addPillow();
+```js
+var animals = ko([
+  'cow',
+  'sheep',
+  'horse',
+]);
+function addPillow() {
+  animals.assign(animals.concat(['pillow']));
+}
+animals.subscribe(function(newArray) {
+  /*
+   * we have the new array -- but what changed?!
+   */
+});
+addPillow();
+```
 
 ko includes an array plugin which uses observable's event-emitter system to
 give more useful updates. el uses it in order to do efficient DOM updates.
@@ -252,12 +272,14 @@ Observable arrays have the following wrapper interface:
 
 You can get more interesting updates by listening for the following events:
 
-    animals.subscribe({
-      assign: function(newArray) { … },
-      replace: function(index, item) { … },
-      insert: function(index, item) { … },
-      remove: function(index) { … },
-    });
+```js
+animals.subscribe({
+  assign: function(newArray) { … },
+  replace: function(index, item) { … },
+  insert: function(index, item) { … },
+  remove: function(index) { … },
+});
+```
 
 Using `animals.subscribe(function() { … })` would give you updates anytime the
 array changes for any reason. The **assign** handler will only fire when the
@@ -270,11 +292,13 @@ computeds: **deriveds**.
 
 It's useful to be able to call `map` or `filter` on an array, but recomputing it over the whole array wouldn't be terribly efficient:
 
-    el('ul.favourite-animals', ko(function() {
-      return animals().map(function(name) {
-        return el('li', name);
-      });
-    });
+```js
+el('ul.favourite-animals', ko(function() {
+  return animals().map(function(name) {
+    return el('li', name);
+  });
+});
+```
 
 So the wrapped interface also includes the following methods, which return a
 derived array.
@@ -286,9 +310,11 @@ You can't modify a derived.
 
 Example:
 
-    el('ul.favourite-animals', animals.map(function(name) {
-      return el('li', name);
-    });
+```js
+el('ul.favourite-animals', animals.map(function(name) {
+  return el('li', name);
+});
+```
 
 Any replace/insert/remove changes are propogated to the derived, being careful
 to only recompute items if their dependencies have changed. So you get
@@ -308,11 +334,15 @@ What if an array element changes?
 
 This is considered an array update:
 
-    array.replace(1, 'four');
+```js
+array.replace(1, 'four');
+```
 
 This is not:
 
-    array()[1].fooBar = 'six';
+```js
+array()[1].fooBar = 'six';
+```
 
 An array tracks the objects _in_ it, not their _state_. It's just a list of pointers, if you like.
 
@@ -325,14 +355,16 @@ Don't do that; you'll get confused.
 
 You could do this instead:
 
-    array = ko(["cow", "sheep", "horse"]);
-    array.update(1, "elephant");
+```js
+array = ko(["cow", "sheep", "horse"]);
+array.update(1, "elephant");
 
-    // -elsewhere in your code-
+// -elsewhere in your code-
 
-    array.on('replace', function(index, item) {
-      // . . .
-    });
+array.on('replace', function(index, item) {
+  // . . .
+});
+```
 
 Or you could have an array of objects, where some of the object's properties
 might be observable.
@@ -361,20 +393,22 @@ Nope. Use a proper framework instead, such as [Overture](http://overturejs.com/)
 "I have a failing case!"
 ------------------------
 
-    var A = ko(5);
+```js
+var A = ko(5);
 
-    var filter = ko(function(){
-        var divisor = A();
-        return function(element){
-            return element % divisor === 0;
-        };
-    });
+var filter = ko(function(){
+    var divisor = A();
+    return function(element){
+        return element % divisor === 0;
+    };
+});
 
-    var list = ko(function(){ return [A()]; });
+var list = ko(function(){ return [A()]; });
 
-    var filteredList = ko(function(){ var l = list().filter(filter()); console.log(l); return l;});
+var filteredList = ko(function(){ var l = list().filter(filter()); console.log(l); return l;});
 
-	A.assign(7)
+A.assign(7)
+```
 
 Shut up, Dan.
 
@@ -383,4 +417,5 @@ License
 =======
 
 MIT. (It's small enough that you could always rewrite it yourself anyway.)
+
 
